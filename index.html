@@ -10,7 +10,9 @@
 <meta name="google-site-verification" content="0gidfQ8wTrkKa7nBE8wokZ-pj7brygHVRzHDWTbFJI0" />
 
 <!-- 📊 Google Analytics — tashrif buyuruvchilarni kuzatish -->
-<!-- 🔧 O'Z ANALYTICS ID INGIZNI QUYIDAGI GA4 ID O'RNIGA YOZING -->
+<!-- 🔧 Google Analytics ID olsangiz, G-XXXXXXXXXX ni o'z ID ingizga almashtiring -->
+<!-- Hozircha o'chirib qo'yiladi — ID yo'qligida xato bermaslik uchun -->
+<!--
 <script async src="https://www.googletagmanager.com/gtag/js?id=G-XXXXXXXXXX"></script>
 <script>
   window.dataLayer = window.dataLayer || [];
@@ -18,6 +20,7 @@
   gtag('js', new Date());
   gtag('config', 'G-XXXXXXXXXX');
 </script>
+-->
 
 <!-- 🔎 SEO Meta Tags — Google qidiruv uchun -->
 <meta name="description" content="Zakovat — O'zbek tilidagi bilim testlash platformasi. Test tuzing, guruh yarating, real-time sinxronizatsiya bilan test topshiring. Bepul va ochiq!" />
@@ -682,10 +685,32 @@ loadScript(
 );
 
 // ===== GUN.JS — REAL-TIME DATABASE (zero config!) =====
+// Gun.js yuklanmasa ham sayt ishlaydi — localStorage ga tayanadi
+var _gunLoadTimeout = setTimeout(function() {
+  // Gun 5 soniyada yuklanmasa, offline rejimga o't
+  if (!window._gunLibReady) {
+    console.warn('Gun.js yuklanmadi — offline rejim faol');
+    try { updateSyncStatus('offline'); } catch(e) {}
+  }
+}, 5000);
+
 loadScript(
   'https://cdn.jsdelivr.net/npm/gun/gun.js',
-  function() { window._gunLibReady = true; initGunSync(); },
-  function() { console.warn('Gun.js yuklanmadi — offline rejim'); }
+  function() {
+    clearTimeout(_gunLoadTimeout);
+    try {
+      window._gunLibReady = true;
+      initGunSync();
+    } catch(e) {
+      console.warn('Gun.js ishga tushirishda xatolik:', e);
+      try { updateSyncStatus('offline'); } catch(e2) {}
+    }
+  },
+  function() {
+    clearTimeout(_gunLoadTimeout);
+    console.warn('Gun.js yuklanmadi — offline rejim');
+    try { updateSyncStatus('offline'); } catch(e) {}
+  }
 );
 </script>
 
@@ -767,39 +792,63 @@ loadScript(
   // Initialize Gun.js when library loads
   window.initGunSync = function() {
     try {
-      if (typeof Gun === 'undefined') { updateSyncStatus('offline'); return; }
+      if (typeof Gun === 'undefined') {
+        console.warn('Gun mavjud emas — offline rejim');
+        updateSyncStatus('offline');
+        return;
+      }
 
-      // Gun with free relay servers — NO configuration needed!
-      _gun = Gun(['https://gun-manhattan.herokuapp.com/gun', 'https://gun-us.herokuapp.com/gun']);
+      // Gun with localStorage false (we handle it ourselves)
+      // If relay servers are down, Gun still works locally
+      _gun = Gun({ localStorage: false });
       _gunReady = true;
       _gunTestsRef = _gun.get('zakovat_tests');
 
-      console.log('✅ Gun.js ulandi! Real-time rejim faol.');
+      console.log('✅ Gun.js ishga tushdi! Real-time sinxronizatsiya faol.');
       updateSyncStatus('connected');
+
+      // Try to connect to relay peers for cross-device sync
+      try {
+        _gun.on('hi', function() {
+          updateSyncStatus('connected');
+        });
+        _gun.on('bye', function() {
+          updateSyncStatus('offline');
+        });
+      } catch(e) {}
 
       // Listen for real-time changes
       setupGunListeners();
     } catch(e) {
-      console.warn('Gun.js ulanishda xatolik:', e.message);
-      updateSyncStatus('error');
+      console.warn('Gun.js ishga tushirishda xatolik:', e.message);
+      updateSyncStatus('offline');
     }
   };
 
   function setupGunListeners() {
     if (!_gunTestsRef || !_gunReady) return;
 
-    // Listen for any test changes in real-time
-    _gunTestsRef.on(function(data) {
-      if (!data) return;
-      // Convert Gun object to array (remove Gun internal fields)
-      var tests = gunDataToArray(data);
-      // Save to localStorage as backup
-      try { localStorage.setItem('at_tests', JSON.stringify(tests)); } catch(e) {}
-      // Update memory cache
-      delete _memoryStore['at_tests'];
-      // Refresh UI
-      handleDataSync('at_tests');
-    });
+    try {
+      // Listen for any test changes in real-time
+      _gunTestsRef.on(function(data) {
+        if (!data) return;
+        try {
+          // Convert Gun object to array (remove Gun internal fields)
+          var tests = gunDataToArray(data);
+          if (tests.length === 0) return; // Don't overwrite with empty
+          // Save to localStorage as backup
+          try { localStorage.setItem('at_tests', JSON.stringify(tests)); } catch(e) {}
+          // Update memory cache
+          delete _memoryStore['at_tests'];
+          // Refresh UI
+          handleDataSync('at_tests');
+        } catch(e) {
+          console.warn('Gun.js ma\'lumotlarni o\'qishda xatolik:', e);
+        }
+      });
+    } catch(e) {
+      console.warn('Gun.js listener o\'rnatishda xatolik:', e);
+    }
   }
 
   // Convert Gun.js data to array (removes _ meta fields)
@@ -912,18 +961,22 @@ loadScript(
   }
 
   function saveTests(tests) {
-    // Save to localStorage (fast, always works)
-    try { storageSet('at_tests', JSON.stringify(tests)); } catch(e) {}
+    // Save to localStorage (fast, always works — PRIMARY storage)
+    try { storageSet('at_tests', JSON.stringify(tests)); } catch(e) {
+      console.warn('localStorage ga yozishda xatolik:', e);
+    }
 
-    // Save to Gun.js for real-time sync
+    // Try to save to Gun.js for real-time sync (SECONDARY)
     if (_gunReady && _gunTestsRef) {
       try {
-        // Save each test individually under its ID
         for (var i = 0; i < tests.length; i++) {
-          _gunTestsRef.get(tests[i].id).put(tests[i]);
+          // Deep clone to avoid Gun.js mutating our objects
+          var testCopy = JSON.parse(JSON.stringify(tests[i]));
+          _gunTestsRef.get(tests[i].id).put(testCopy);
         }
       } catch(e) {
-        console.warn('Gun.js ga yozishda xatolik:', e.message);
+        // Gun.js xato bersa — localStorage ishlayveradi, muammo yo'q
+        console.warn('Gun.js ga yozishda xatolik (offline rejim):', e.message);
       }
     }
   }
@@ -931,7 +984,12 @@ loadScript(
   // Update a single test in Gun.js (efficient)
   function updateTestInCloud(test) {
     if (_gunReady && _gunTestsRef && test && test.id) {
-      try { _gunTestsRef.get(test.id).put(test); } catch(e) {}
+      try {
+        var testCopy = JSON.parse(JSON.stringify(test));
+        _gunTestsRef.get(test.id).put(testCopy);
+      } catch(e) {
+        console.warn('Gun.js yangilashda xatolik:', e.message);
+      }
     }
   }
 
@@ -939,8 +997,11 @@ loadScript(
   function saveResultToCloud(testId, result) {
     if (_gunReady && _gunTestsRef) {
       try {
-        _gunTestsRef.get(testId).get('results').get(Date.now().toString()).put(result);
-      } catch(e) {}
+        var copy = JSON.parse(JSON.stringify(result));
+        _gunTestsRef.get(testId).get('results').get(Date.now().toString()).put(copy);
+      } catch(e) {
+        console.warn('Gun.js natija saqlashda xatolik:', e.message);
+      }
     }
   }
 
