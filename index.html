@@ -4,7 +4,64 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Zakovat — Bilim Testlash Platformasi</title>
-  <meta name="google-site-verification" content="0gidfQ8wTrkKa7nBE8wokZ-pj7brygHVRzHDWTbFJI0" />
+
+<!-- ===== GOOGLE INTEGRATIONS ===== -->
+<!-- 🔍 Google Site Verification (Search Console) -->
+<meta name="google-site-verification" content="0gidfQ8wTrkKa7nBE8wokZ-pj7brygHVRzHDWTbFJI0" />
+
+<!-- 📊 Google Analytics — tashrif buyuruvchilarni kuzatish -->
+<!-- 🔧 O'Z ANALYTICS ID INGIZNI QUYIDAGI GA4 ID O'RNIGA YOZING -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-XXXXXXXXXX"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', 'G-XXXXXXXXXX');
+</script>
+
+<!-- 🔎 SEO Meta Tags — Google qidiruv uchun -->
+<meta name="description" content="Zakovat — O'zbek tilidagi bilim testlash platformasi. Test tuzing, guruh yarating, real-time sinxronizatsiya bilan test topshiring. Bepul va ochiq!" />
+<meta name="keywords" content="test, savol, javob, bilim, o'qituvchi, talaba, guruh, imtihon, quiz, LMS, o'zbek, axborot tizimi" />
+<meta name="author" content="Zakovat Team" />
+<meta name="robots" content="index, follow" />
+<meta name="theme-color" content="#6c3ce0" />
+
+<!-- 📱 Open Graph — WhatsApp, Telegram, Facebook da chiroyli ko'rinish -->
+<meta property="og:title" content="Zakovat — Bilim Testlash Platformasi" />
+<meta property="og:description" content="Test tuzing, guruh yarating va bilimlaringizni tekshiring! Real-time sinxronizatsiya, turli qurilmalardan ishlaydi." />
+<meta property="og:type" content="website" />
+<meta property="og:locale" content="uz_UZ" />
+
+<!-- 🐦 Twitter Card -->
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="Zakovat — Bilim Testlash Platformasi" />
+<meta name="twitter:description" content="Test tuzing, guruh yarating va bilimlaringizni tekshiring!" />
+
+<!-- 🍎 PWA / Mobile -->
+<meta name="apple-mobile-web-app-title" content="Zakovat" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<link rel="manifest" href="data:application/json;base64,eyJuYW1lIjoiWmFrb3ZhdCAtIEJpbGltIFRlc3RsYXNoIFBsYXRmb3JtYXNpIiwic2hvcnRfbmFtZSI6Ilpha292YXQiLCJzdGFydF91cmwiOiIuIiwiZGlzcGxheSI6InN0YW5kYWxvbmUiLCJiYWNrZ3JvdW5kX2NvbG9yIjoiIzBmMGExZSIsInRoZW1lX2NvbG9yIjoiIzZjM2NlMCJ9">
+
+<!-- 📋 Structured Data — Google Search rich results -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebApplication",
+  "name": "Zakovat",
+  "description": "O'zbek tilidagi bilim testlash platformasi",
+  "applicationCategory": "EducationalApplication",
+  "operatingSystem": "Web Browser",
+  "offers": {
+    "@type": "Offer",
+    "price": "0",
+    "priceCurrency": "UZS"
+  },
+  "inLanguage": "uz",
+  "browserRequirements": "Requires JavaScript"
+}
+</script>
+
 <style>
   :root {
     --primary: #6c3ce0;
@@ -336,6 +393,12 @@
       <p>Talaba paneli — guruhga kiring va test boshlang</p>
     </div>
   </div>
+  <div style="margin-top:24px;max-width:600px;width:100%;padding:16px;background:rgba(139,92,246,0.08);border:1px solid rgba(139,92,246,0.15);border-radius:12px;text-align:center">
+    <p style="font-size:13px;color:var(--text2);line-height:1.6">
+      💡 <strong style="color:var(--primary-light)">Guruh testi</strong> — Turli qurilmalardan real-time sinxron! O'qituvchi test yarating, talabalar login/parol bilan kiring. O'qituvchi "Boshlash" bossa, hamyonkasib barcha talabalar testni bir vaqtda boshlaydi! Hech qanday sozlash kerak emas — avtomatik ishlaydi!
+    </p>
+    <div id="firebaseStatus" style="margin-top:10px;font-size:12px;padding:6px 12px;border-radius:8px;display:inline-block"></div>
+  </div>
 </div>
 
 <!-- ============ TEACHER SCREEN ============ -->
@@ -617,6 +680,13 @@ loadScript(
   function() { _mammothLibReady = true; },
   function() { console.warn('mammoth.js yuklanmadi'); }
 );
+
+// ===== GUN.JS — REAL-TIME DATABASE (zero config!) =====
+loadScript(
+  'https://cdn.jsdelivr.net/npm/gun/gun.js',
+  function() { window._gunLibReady = true; initGunSync(); },
+  function() { console.warn('Gun.js yuklanmadi — offline rejim'); }
+);
 </script>
 
 <!-- ============ MAIN APP SCRIPT ============ -->
@@ -689,39 +759,150 @@ loadScript(
     return a;
   }
 
-  // ===== STORAGE WITH FALLBACK =====
-  var _memoryStore = {}; // Fallback for file:// protocol
+  // ===== GUN.JS REAL-TIME SYNC =====
+  var _gun = null;
+  var _gunReady = false;
+  var _gunTestsRef = null;
+
+  // Initialize Gun.js when library loads
+  window.initGunSync = function() {
+    try {
+      if (typeof Gun === 'undefined') { updateSyncStatus('offline'); return; }
+
+      // Gun with free relay servers — NO configuration needed!
+      _gun = Gun(['https://gun-manhattan.herokuapp.com/gun', 'https://gun-us.herokuapp.com/gun']);
+      _gunReady = true;
+      _gunTestsRef = _gun.get('zakovat_tests');
+
+      console.log('✅ Gun.js ulandi! Real-time rejim faol.');
+      updateSyncStatus('connected');
+
+      // Listen for real-time changes
+      setupGunListeners();
+    } catch(e) {
+      console.warn('Gun.js ulanishda xatolik:', e.message);
+      updateSyncStatus('error');
+    }
+  };
+
+  function setupGunListeners() {
+    if (!_gunTestsRef || !_gunReady) return;
+
+    // Listen for any test changes in real-time
+    _gunTestsRef.on(function(data) {
+      if (!data) return;
+      // Convert Gun object to array (remove Gun internal fields)
+      var tests = gunDataToArray(data);
+      // Save to localStorage as backup
+      try { localStorage.setItem('at_tests', JSON.stringify(tests)); } catch(e) {}
+      // Update memory cache
+      delete _memoryStore['at_tests'];
+      // Refresh UI
+      handleDataSync('at_tests');
+    });
+  }
+
+  // Convert Gun.js data to array (removes _ meta fields)
+  function gunDataToArray(data) {
+    var arr = [];
+    var keys = Object.keys(data);
+    for (var i = 0; i < keys.length; i++) {
+      var k = keys[i];
+      if (k === '_' || k.charAt(0) === '_') continue; // Skip Gun internal
+      var item = data[k];
+      if (item && typeof item === 'object' && item.id) {
+        // Deep clean — remove Gun internal refs
+        arr.push(cleanGunObject(item));
+      }
+    }
+    return arr;
+  }
+
+  // Remove Gun.js internal properties recursively
+  function cleanGunObject(obj) {
+    if (!obj || typeof obj !== 'object') return obj;
+    var clean = {};
+    var keys = Object.keys(obj);
+    for (var i = 0; i < keys.length; i++) {
+      var k = keys[i];
+      if (k === '_') continue; // Skip Gun internal
+      var val = obj[k];
+      if (val && typeof val === 'object' && !Array.isArray(val)) {
+        // Check if it's a Gun reference (has # property)
+        if (val['#']) {
+          // This is a Gun reference — skip it, data will come via the path
+          continue;
+        }
+        clean[k] = cleanGunObject(val);
+      } else if (Array.isArray(val)) {
+        clean[k] = val;
+      } else {
+        clean[k] = val;
+      }
+    }
+    return clean;
+  }
+
+  function updateSyncStatus(status) {
+    var el = document.getElementById('firebaseStatus');
+    if (!el) return;
+    if (status === 'connected') {
+      el.style.background = 'rgba(16,185,129,0.15)';
+      el.style.color = '#6ee7b7';
+      el.textContent = '🌐 Real-time: Ulangan (Turli qurilmalardan ishlaydi!)';
+    } else if (status === 'offline') {
+      el.style.background = 'rgba(239,68,68,0.15)';
+      el.style.color = '#fca5a5';
+      el.textContent = '⚠️ Offline rejim (Faqat bitta brauzerda ishlaydi)';
+    } else {
+      el.style.background = 'rgba(245,158,11,0.15)';
+      el.style.color = '#fcd34d';
+      el.textContent = '⏳ Ulanmoqda...';
+    }
+  }
+
+  // ===== STORAGE WITH FALLBACK (Gun.js + localStorage) =====
+  var _memoryStore = {};
   var _storageWorks = null;
 
+  // BroadcastChannel for same-browser tab sync
+  var _bc = null;
+  try { _bc = new BroadcastChannel('zakovat_sync'); } catch(e) {}
+
   function storageSet(key, value) {
-    // Always save to memory
     _memoryStore[key] = value;
-    // Try localStorage
-    if (_storageWorks === false) return;
-    try {
-      localStorage.setItem(key, value);
-      _storageWorks = true;
-    } catch(e) {
-      _storageWorks = false;
-    }
+    try { localStorage.setItem(key, value); _storageWorks = true; } catch(e) { _storageWorks = false; }
+    if (_bc) { try { _bc.postMessage({ key: key, action: 'update' }); } catch(e) {} }
   }
 
   function storageGet(key) {
-    // Try memory first
     if (_memoryStore[key] !== undefined) return _memoryStore[key];
-    // Try localStorage
     try {
       var val = localStorage.getItem(key);
-      if (val !== null) {
-        _memoryStore[key] = val;
-        return val;
-      }
-    } catch(e) {
-      _storageWorks = false;
-    }
+      if (val !== null) { _memoryStore[key] = val; return val; }
+    } catch(e) { _storageWorks = false; }
     return null;
   }
 
+  // Listen for localStorage changes from OTHER tabs
+  window.addEventListener('storage', function(e) {
+    if (e.key) {
+      _memoryStore[e.key] = e.newValue;
+      handleDataSync(e.key);
+    }
+  });
+
+  // Listen for BroadcastChannel
+  if (_bc) {
+    _bc.onmessage = function(e) {
+      if (e.data && e.data.key) {
+        delete _memoryStore[e.data.key];
+        handleDataSync(e.data.key);
+      }
+    };
+  }
+
+  // ===== GUN-AWARE getTests / saveTests =====
   function getTests() {
     try {
       var data = storageGet('at_tests');
@@ -731,10 +912,35 @@ loadScript(
   }
 
   function saveTests(tests) {
-    try {
-      storageSet('at_tests', JSON.stringify(tests));
-    } catch(e) {
-      // Memory storage always works, no error needed
+    // Save to localStorage (fast, always works)
+    try { storageSet('at_tests', JSON.stringify(tests)); } catch(e) {}
+
+    // Save to Gun.js for real-time sync
+    if (_gunReady && _gunTestsRef) {
+      try {
+        // Save each test individually under its ID
+        for (var i = 0; i < tests.length; i++) {
+          _gunTestsRef.get(tests[i].id).put(tests[i]);
+        }
+      } catch(e) {
+        console.warn('Gun.js ga yozishda xatolik:', e.message);
+      }
+    }
+  }
+
+  // Update a single test in Gun.js (efficient)
+  function updateTestInCloud(test) {
+    if (_gunReady && _gunTestsRef && test && test.id) {
+      try { _gunTestsRef.get(test.id).put(test); } catch(e) {}
+    }
+  }
+
+  // Save result to cloud
+  function saveResultToCloud(testId, result) {
+    if (_gunReady && _gunTestsRef) {
+      try {
+        _gunTestsRef.get(testId).get('results').get(Date.now().toString()).put(result);
+      } catch(e) {}
     }
   }
 
@@ -744,6 +950,36 @@ loadScript(
       if (tests[i].id === id) return tests[i];
     }
     return null;
+  }
+
+  // Handle data sync — refresh UI when data changes
+  function handleDataSync(key) {
+    if (key === 'at_tests') {
+      // If on teacher control screen, refresh
+      if (document.getElementById('teacherControlScreen').classList.contains('active') && currentTest) {
+        updateTeacherControl(currentTest.id);
+      }
+      // If on student waiting screen, refresh
+      if (document.getElementById('studentWaitScreen').classList.contains('active') && currentTest) {
+        var test = getTestById(currentTest.id);
+        if (test) {
+          var members = test.connectedStudents || [];
+          var mhtml = '';
+          for (var i = 0; i < members.length; i++) mhtml += '<div class="member-chip">👤 ' + escHtml(members[i].name) + '</div>';
+          document.getElementById('groupMembers').innerHTML = mhtml;
+          document.getElementById('waitCount').textContent = members.length + ' talaba ulangan';
+          // If teacher started the test, begin!
+          if (test.groupStarted) {
+            if (window._waitPoll) clearInterval(window._waitPoll);
+            startTestForStudent();
+          }
+        }
+      }
+      // If on student login screen, refresh test list
+      if (document.getElementById('studentLoginScreen').classList.contains('active')) {
+        renderTestList();
+      }
+    }
   }
 
   // ===== EVENT BINDING =====
@@ -1270,6 +1506,7 @@ loadScript(
     var tests = getTests();
     tests.push(test);
     saveTests(tests);
+    updateTestInCloud(test);
 
     var testId = test.id;
 
@@ -1380,6 +1617,7 @@ loadScript(
     if (idx === -1) return;
     tests[idx].groupStarted = true;
     saveTests(tests);
+    updateTestInCloud(tests[idx]);
     showToast('Test boshlandi!', 'success');
     updateTeacherControl(currentTest.id);
   }
@@ -1435,6 +1673,7 @@ loadScript(
     if (!found) {
       tests[idx].connectedStudents.push({ name: name, connectedAt: new Date().toISOString() });
       saveTests(tests);
+      updateTestInCloud(tests[idx]);
     }
 
     if (test.startMode === 'group') {
@@ -1694,8 +1933,11 @@ loadScript(
     for (var i = 0; i < tests.length; i++) { if (tests[i].id === testState.testId) { idx = i; break; } }
     if (idx !== -1) {
       if (!tests[idx].results) tests[idx].results = [];
-      tests[idx].results.push({ studentName: testState.studentName, correct: correct, total: total, percentage: percentage, time: totalTime, completedAt: new Date().toISOString() });
+      var resultObj = { studentName: testState.studentName, correct: correct, total: total, percentage: percentage, time: totalTime, completedAt: new Date().toISOString() };
+      tests[idx].results.push(resultObj);
       saveTests(tests);
+      updateTestInCloud(tests[idx]);
+      saveResultToCloud(tests[idx].id, resultObj);
     }
 
     var allResults = [];
