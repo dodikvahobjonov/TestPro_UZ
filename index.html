@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Zakovat — Bilim Testlash Platformasi</title>
- (<meta name="google-site-verification" content="..." />)
+<meta name="google-site-verification" content="..." />
 <!-- ===== GOOGLE INTEGRATIONS ===== -->
 <!-- 🔍 Google Site Verification (Search Console) -->
 <meta name="google-site-verification" content="0gidfQ8wTrkKa7nBE8wokZ-pj7brygHVRzHDWTbFJI0" />
@@ -398,9 +398,8 @@
   </div>
   <div style="margin-top:24px;max-width:600px;width:100%;padding:16px;background:rgba(139,92,246,0.08);border:1px solid rgba(139,92,246,0.15);border-radius:12px;text-align:center">
     <p style="font-size:13px;color:var(--text2);line-height:1.6">
-      💡 <strong style="color:var(--primary-light)">Guruh testi</strong> — Turli qurilmalardan real-time sinxron! O'qituvchi test yarating, talabalar login/parol bilan kiring. O'qituvchi "Boshlash" bossa, hamyonkasib barcha talabalar testni bir vaqtda boshlaydi! Hech qanday sozlash kerak emas — avtomatik ishlaydi!
+      💡 <strong style="color:var(--primary-light)">Guruh testi</strong> — O'qituvchi test yarating va <strong>Test kodini</strong> talabalarga yuboring (Telegram, WhatsApp). Talaba kodni kiritadi va test avtomatik yuklanadi! Server kerak emas!
     </p>
-    <div id="firebaseStatus" style="margin-top:10px;font-size:12px;padding:6px 12px;border-radius:8px;display:inline-block"></div>
   </div>
 </div>
 
@@ -531,6 +530,17 @@ To'g'ri javob: B"></textarea>
       <h2 style="font-size:22px">🎓 Test topshirish</h2>
       <button class="btn btn-outline btn-sm" id="btnStudentBack">← Orqaga</button>
     </div>
+
+    <!-- 🆕 TEST KODI BILAN KIRISH -->
+    <div style="background:rgba(139,92,246,0.1);border:1px solid rgba(139,92,246,0.3);border-radius:12px;padding:16px;margin-bottom:20px">
+      <h4 style="font-size:15px;margin-bottom:10px">📋 Test kodini kiriting</h4>
+      <p style="color:var(--text2);font-size:13px;margin-bottom:10px">O'qituvchi bergan test kodini bu yerga tashlang yoki yozing:</p>
+      <textarea id="importTestCode" rows="3" placeholder="Test kodini bu yerga qo'ying..." style="width:100%;padding:10px;background:rgba(255,255,255,0.07);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;resize:vertical;outline:none"></textarea>
+      <button class="btn btn-success btn-sm" style="margin-top:8px;width:100%" id="btnImportTest">📥 Testni yuklash</button>
+    </div>
+
+    <div style="text-align:center;color:var(--text2);font-size:13px;margin-bottom:16px">— yoki login/parol bilan kiring —</div>
+
     <div id="availableTests" style="margin-bottom:20px">
       <p style="color:var(--text2);font-size:14px;margin-bottom:10px">Mavjud testlar:</p>
       <div id="testList"></div>
@@ -684,34 +694,9 @@ loadScript(
   function() { console.warn('mammoth.js yuklanmadi'); }
 );
 
-// ===== GUN.JS — REAL-TIME DATABASE (zero config!) =====
-// Gun.js yuklanmasa ham sayt ishlaydi — localStorage ga tayanadi
-var _gunLoadTimeout = setTimeout(function() {
-  // Gun 5 soniyada yuklanmasa, offline rejimga o't
-  if (!window._gunLibReady) {
-    console.warn('Gun.js yuklanmadi — offline rejim faol');
-    try { updateSyncStatus('offline'); } catch(e) {}
-  }
-}, 5000);
-
-loadScript(
-  'https://cdn.jsdelivr.net/npm/gun/gun.js',
-  function() {
-    clearTimeout(_gunLoadTimeout);
-    try {
-      window._gunLibReady = true;
-      initGunSync();
-    } catch(e) {
-      console.warn('Gun.js ishga tushirishda xatolik:', e);
-      try { updateSyncStatus('offline'); } catch(e2) {}
-    }
-  },
-  function() {
-    clearTimeout(_gunLoadTimeout);
-    console.warn('Gun.js yuklanmadi — offline rejim');
-    try { updateSyncStatus('offline'); } catch(e) {}
-  }
-);
+// ===== TASHQI KUTUBXONALAR YUKLANDI =====
+// Gun.js olib tashlandi — ishlamadi
+// Endi "Test kodi" orqali ma'lumot ulashish ishlatiladi (server kerak emas!)
 </script>
 
 <!-- ============ MAIN APP SCRIPT ============ -->
@@ -784,133 +769,7 @@ loadScript(
     return a;
   }
 
-  // ===== GUN.JS REAL-TIME SYNC =====
-  var _gun = null;
-  var _gunReady = false;
-  var _gunTestsRef = null;
-
-  // Initialize Gun.js when library loads
-  window.initGunSync = function() {
-    try {
-      if (typeof Gun === 'undefined') {
-        console.warn('Gun mavjud emas — offline rejim');
-        updateSyncStatus('offline');
-        return;
-      }
-
-      // Gun with localStorage false (we handle it ourselves)
-      // If relay servers are down, Gun still works locally
-      _gun = Gun({ localStorage: false });
-      _gunReady = true;
-      _gunTestsRef = _gun.get('zakovat_tests');
-
-      console.log('✅ Gun.js ishga tushdi! Real-time sinxronizatsiya faol.');
-      updateSyncStatus('connected');
-
-      // Try to connect to relay peers for cross-device sync
-      try {
-        _gun.on('hi', function() {
-          updateSyncStatus('connected');
-        });
-        _gun.on('bye', function() {
-          updateSyncStatus('offline');
-        });
-      } catch(e) {}
-
-      // Listen for real-time changes
-      setupGunListeners();
-    } catch(e) {
-      console.warn('Gun.js ishga tushirishda xatolik:', e.message);
-      updateSyncStatus('offline');
-    }
-  };
-
-  function setupGunListeners() {
-    if (!_gunTestsRef || !_gunReady) return;
-
-    try {
-      // Listen for any test changes in real-time
-      _gunTestsRef.on(function(data) {
-        if (!data) return;
-        try {
-          // Convert Gun object to array (remove Gun internal fields)
-          var tests = gunDataToArray(data);
-          if (tests.length === 0) return; // Don't overwrite with empty
-          // Save to localStorage as backup
-          try { localStorage.setItem('at_tests', JSON.stringify(tests)); } catch(e) {}
-          // Update memory cache
-          delete _memoryStore['at_tests'];
-          // Refresh UI
-          handleDataSync('at_tests');
-        } catch(e) {
-          console.warn('Gun.js ma\'lumotlarni o\'qishda xatolik:', e);
-        }
-      });
-    } catch(e) {
-      console.warn('Gun.js listener o\'rnatishda xatolik:', e);
-    }
-  }
-
-  // Convert Gun.js data to array (removes _ meta fields)
-  function gunDataToArray(data) {
-    var arr = [];
-    var keys = Object.keys(data);
-    for (var i = 0; i < keys.length; i++) {
-      var k = keys[i];
-      if (k === '_' || k.charAt(0) === '_') continue; // Skip Gun internal
-      var item = data[k];
-      if (item && typeof item === 'object' && item.id) {
-        // Deep clean — remove Gun internal refs
-        arr.push(cleanGunObject(item));
-      }
-    }
-    return arr;
-  }
-
-  // Remove Gun.js internal properties recursively
-  function cleanGunObject(obj) {
-    if (!obj || typeof obj !== 'object') return obj;
-    var clean = {};
-    var keys = Object.keys(obj);
-    for (var i = 0; i < keys.length; i++) {
-      var k = keys[i];
-      if (k === '_') continue; // Skip Gun internal
-      var val = obj[k];
-      if (val && typeof val === 'object' && !Array.isArray(val)) {
-        // Check if it's a Gun reference (has # property)
-        if (val['#']) {
-          // This is a Gun reference — skip it, data will come via the path
-          continue;
-        }
-        clean[k] = cleanGunObject(val);
-      } else if (Array.isArray(val)) {
-        clean[k] = val;
-      } else {
-        clean[k] = val;
-      }
-    }
-    return clean;
-  }
-
-  function updateSyncStatus(status) {
-    var el = document.getElementById('firebaseStatus');
-    if (!el) return;
-    if (status === 'connected') {
-      el.style.background = 'rgba(16,185,129,0.15)';
-      el.style.color = '#6ee7b7';
-      el.textContent = '🌐 Real-time: Ulangan (Turli qurilmalardan ishlaydi!)';
-    } else if (status === 'offline') {
-      el.style.background = 'rgba(239,68,68,0.15)';
-      el.style.color = '#fca5a5';
-      el.textContent = '⚠️ Offline rejim (Faqat bitta brauzerda ishlaydi)';
-    } else {
-      el.style.background = 'rgba(245,158,11,0.15)';
-      el.style.color = '#fcd34d';
-      el.textContent = '⏳ Ulanmoqda...';
-    }
-  }
-
-  // ===== STORAGE WITH FALLBACK (Gun.js + localStorage) =====
+  // ===== STORAGE (localStorage + BroadcastChannel) =====
   var _memoryStore = {};
   var _storageWorks = null;
 
@@ -951,7 +810,7 @@ loadScript(
     };
   }
 
-  // ===== GUN-AWARE getTests / saveTests =====
+  // ===== getTests / saveTests =====
   function getTests() {
     try {
       var data = storageGet('at_tests');
@@ -961,47 +820,62 @@ loadScript(
   }
 
   function saveTests(tests) {
-    // Save to localStorage (fast, always works — PRIMARY storage)
     try { storageSet('at_tests', JSON.stringify(tests)); } catch(e) {
       console.warn('localStorage ga yozishda xatolik:', e);
     }
+  }
 
-    // Try to save to Gun.js for real-time sync (SECONDARY)
-    if (_gunReady && _gunTestsRef) {
-      try {
-        for (var i = 0; i < tests.length; i++) {
-          // Deep clone to avoid Gun.js mutating our objects
-          var testCopy = JSON.parse(JSON.stringify(tests[i]));
-          _gunTestsRef.get(tests[i].id).put(testCopy);
-        }
-      } catch(e) {
-        // Gun.js xato bersa — localStorage ishlayveradi, muammo yo'q
-        console.warn('Gun.js ga yozishda xatolik (offline rejim):', e.message);
-      }
+  // Update test in cloud (placeholder for future server integration)
+  function updateTestInCloud(test) { /* Future: server sync */ }
+
+  // Save result to cloud (placeholder)
+  function saveResultToCloud(testId, result) { /* Future: server sync */ }
+
+  // ===== TEST SHARING VIA CODE =====
+  // O'qituvchi test kodini beradi → talaba kiritadi → test yuklanadi
+  function generateTestShareCode(test) {
+    try {
+      // Minimal test data for sharing
+      var shareData = {
+        n: test.name,
+        q: test.questions,
+        t: test.questionTime,
+        g: test.groupName,
+        l: test.login,
+        p: test.password,
+        s: test.startMode
+      };
+      var json = JSON.stringify(shareData);
+      // Base64 encode
+      return btoa(unescape(encodeURIComponent(json)));
+    } catch(e) {
+      return '';
     }
   }
 
-  // Update a single test in Gun.js (efficient)
-  function updateTestInCloud(test) {
-    if (_gunReady && _gunTestsRef && test && test.id) {
-      try {
-        var testCopy = JSON.parse(JSON.stringify(test));
-        _gunTestsRef.get(test.id).put(testCopy);
-      } catch(e) {
-        console.warn('Gun.js yangilashda xatolik:', e.message);
-      }
-    }
-  }
-
-  // Save result to cloud
-  function saveResultToCloud(testId, result) {
-    if (_gunReady && _gunTestsRef) {
-      try {
-        var copy = JSON.parse(JSON.stringify(result));
-        _gunTestsRef.get(testId).get('results').get(Date.now().toString()).put(copy);
-      } catch(e) {
-        console.warn('Gun.js natija saqlashda xatolik:', e.message);
-      }
+  function importTestFromCode(code) {
+    try {
+      var json = decodeURIComponent(escape(atob(code.trim())));
+      var shareData = JSON.parse(json);
+      if (!shareData.q || !shareData.l) return null;
+      // Create full test object
+      var test = {
+        id: generateId(8),
+        name: shareData.n || 'Imported Test',
+        questions: shareData.q,
+        questionTime: shareData.t || 30,
+        groupName: shareData.g || 'Guruh',
+        login: shareData.l,
+        password: shareData.p,
+        startMode: shareData.s || 'any',
+        createdAt: new Date().toISOString(),
+        groupStarted: false,
+        connectedStudents: [],
+        results: []
+      };
+      return test;
+    } catch(e) {
+      return null;
     }
   }
 
@@ -1016,11 +890,9 @@ loadScript(
   // Handle data sync — refresh UI when data changes
   function handleDataSync(key) {
     if (key === 'at_tests') {
-      // If on teacher control screen, refresh
       if (document.getElementById('teacherControlScreen').classList.contains('active') && currentTest) {
         updateTeacherControl(currentTest.id);
       }
-      // If on student waiting screen, refresh
       if (document.getElementById('studentWaitScreen').classList.contains('active') && currentTest) {
         var test = getTestById(currentTest.id);
         if (test) {
@@ -1029,14 +901,12 @@ loadScript(
           for (var i = 0; i < members.length; i++) mhtml += '<div class="member-chip">👤 ' + escHtml(members[i].name) + '</div>';
           document.getElementById('groupMembers').innerHTML = mhtml;
           document.getElementById('waitCount').textContent = members.length + ' talaba ulangan';
-          // If teacher started the test, begin!
           if (test.groupStarted) {
             if (window._waitPoll) clearInterval(window._waitPoll);
             startTestForStudent();
           }
         }
       }
-      // If on student login screen, refresh test list
       if (document.getElementById('studentLoginScreen').classList.contains('active')) {
         renderTestList();
       }
@@ -1063,6 +933,33 @@ loadScript(
   // Student
   document.getElementById('btnStudentBack').addEventListener('click', function() { showScreen('landingScreen'); });
   document.getElementById('btnStudentLogin').addEventListener('click', studentLoginFn);
+
+  // Import test from code
+  document.getElementById('btnImportTest').addEventListener('click', function() {
+    var code = document.getElementById('importTestCode').value.trim();
+    if (!code) { showToast('Test kodini kiriting', 'error'); return; }
+    var test = importTestFromCode(code);
+    if (!test) { showToast('Test kodi noto\'g\'ri! Qayta tekshiring', 'error'); return; }
+    // Save imported test
+    var tests = getTests();
+    // Check if test with same login already exists
+    var exists = false;
+    for (var i = 0; i < tests.length; i++) {
+      if (tests[i].login === test.login) { exists = true; break; }
+    }
+    if (!exists) {
+      tests.push(test);
+      saveTests(tests);
+      showToast('Test muvaffaqiyatli yuklandi! ✅', 'success');
+    } else {
+      showToast('Bu test allaqachon yuklangan', 'info');
+    }
+    // Auto-fill login and password
+    document.getElementById('studentLogin').value = test.login;
+    document.getElementById('studentPassword').value = test.password;
+    document.getElementById('importTestCode').value = '';
+    renderTestList();
+  });
 
   // Teacher control
   document.getElementById('startGroupBtn').addEventListener('click', startGroupTest);
@@ -1570,6 +1467,7 @@ loadScript(
     updateTestInCloud(test);
 
     var testId = test.id;
+    var shareCode = generateTestShareCode(test);
 
     showModal(
       '<div style="text-align:center">' +
@@ -1581,6 +1479,11 @@ loadScript(
       '<div class="credential-box"><div class="cred-label">PAROL</div><div class="cred-value">' + escHtml(password) + '</div></div>' +
       '</div>' +
       '<p style="color:var(--text2);font-size:13px;margin:12px 0">Bu ma\'lumotlarni talabalarga bering</p>' +
+      '<div class="credential-box" style="margin-top:8px">' +
+      '<div class="cred-label">📋 TEST KODI (talabalarga yuboring!)</div>' +
+      '<textarea id="shareCodeText" readonly style="width:100%;height:60px;font-size:11px;background:rgba(255,255,255,0.05);border:1px solid rgba(16,185,129,0.3);border-radius:8px;color:#6ee7b7;padding:8px;resize:none;font-family:monospace">' + escHtml(shareCode) + '</textarea>' +
+      '<button class="btn btn-success btn-sm" style="margin-top:6px;width:100%" id="btnCopyCode">📋 Kodni nusxalash</button>' +
+      '</div>' +
       '<div style="display:flex;gap:10px;justify-content:center;margin-top:16px">' +
       '<button class="btn btn-outline" id="modalHomeBtn">Bosh sahifa</button>' +
       '<button class="btn btn-primary" id="modalControlBtn">Guruhni boshqarish</button>' +
@@ -1590,6 +1493,17 @@ loadScript(
     // Bind modal buttons
     document.getElementById('modalHomeBtn').addEventListener('click', function() { closeModal(); showScreen('landingScreen'); });
     document.getElementById('modalControlBtn').addEventListener('click', function() { closeModal(); openTeacherControl(testId); });
+    document.getElementById('btnCopyCode').addEventListener('click', function() {
+      var textarea = document.getElementById('shareCodeText');
+      textarea.select();
+      try {
+        document.execCommand('copy');
+        showToast('Test kodi nusxalandi!', 'success');
+      } catch(e) {
+        // Fallback
+        try { navigator.clipboard.writeText(textarea.value); showToast('Test kodi nusxalandi!', 'success'); } catch(e2) {}
+      }
+    });
 
     // Reset
     parsedQuestions = []; editingQuestions = []; currentStep = 1;
