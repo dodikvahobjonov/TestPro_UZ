@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Axborot Tizimi Test</title>
+<title>Zakovat — Bilim Testlash Platformasi</title>
 <style>
   :root {
     --primary: #6c3ce0;
@@ -320,9 +320,9 @@
 
 <!-- ============ LANDING SCREEN ============ -->
 <div id="landingScreen" class="screen active">
-  <div class="landing-logo">📝</div>
-  <h1 class="landing-title">Axborot Tizimi Test</h1>
-  <p class="landing-sub">Test tuzing, guruh yarating va bilimlaringizni tekshiring</p>
+  <div class="landing-logo">🧠</div>
+  <h1 class="landing-title">Zakovat</h1>
+  <p class="landing-sub">Bilim testlash platformasi — Test tuzing, guruh yarating va bilimlaringizni tekshiring</p>
   <div class="landing-cards">
     <div class="landing-card" id="btnTeacher">
       <div class="icon">👨‍🏫</div>
@@ -541,6 +541,9 @@ To'g'ri javob: B"></textarea>
     <div id="wrongMessage" style="display:none"></div>
   </div>
   <div class="question-nav" id="questionNav"></div>
+  <div style="margin-top:20px;text-align:center">
+    <button class="btn btn-danger btn-sm" id="btnFinishTest" style="display:none">🏁 Testni yakunlash</button>
+  </div>
 </div>
 
 <!-- ============ RESULT SCREEN ============ -->
@@ -766,6 +769,23 @@ loadScript(
   // Teacher control
   document.getElementById('startGroupBtn').addEventListener('click', startGroupTest);
   document.getElementById('btnControlHome').addEventListener('click', function() { showScreen('landingScreen'); });
+
+  // Finish test button
+  document.getElementById('btnFinishTest').addEventListener('click', function() {
+    showModal(
+      '<h3 style="text-align:center;margin-bottom:12px">🏁 Testni yakunlash</h3>' +
+      '<p style="text-align:center;color:var(--text2);margin-bottom:16px">Haqiqatan ham testni yakunlamoqchimisiz?</p>' +
+      '<p style="text-align:center;color:#fca5a5;font-size:14px;margin-bottom:20px">Javob berilmagan savollar xato hisoblanadi!</p>' +
+      '<div style="display:flex;gap:10px;justify-content:center">' +
+      '<button class="btn btn-outline btn-sm" onclick="document.getElementById(\'modalOverlay\').classList.remove(\'show\')">Bekor qilish</button>' +
+      '<button class="btn btn-danger btn-sm" id="btnConfirmFinish">Ha, yakunlash</button>' +
+      '</div>'
+    );
+    document.getElementById('btnConfirmFinish').addEventListener('click', function() {
+      closeModal();
+      finishTest();
+    });
+  });
 
   // Result
   document.getElementById('btnResultHome').addEventListener('click', function() { showScreen('landingScreen'); });
@@ -1519,6 +1539,14 @@ loadScript(
 
     document.getElementById('questionText').textContent = q.text;
 
+    // Show/hide finish button (visible when at least 1 question answered)
+    var finishBtn = document.getElementById('btnFinishTest');
+    if (answeredCount >= 1) {
+      finishBtn.style.display = 'inline-flex';
+    } else {
+      finishBtn.style.display = 'none';
+    }
+
     var letters = ['A', 'B', 'C', 'D'];
     var opts = q.options;
     var optList = document.getElementById('optionsList');
@@ -1720,7 +1748,7 @@ loadScript(
   document.addEventListener('contextmenu', function(e) { if (testState) e.preventDefault(); });
 
   // Init
-  console.log('✅ Axborot Tizimi Test - ilovasi ishga tushdi!');
+  console.log('✅ Zakovat — Bilim testlash platformasi ishga tushdi!');
 })();
 </script>
 </body>
